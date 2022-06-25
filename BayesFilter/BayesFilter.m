@@ -73,33 +73,48 @@ classdef BayesFilter < handle
         function runSimulation(obj, confidence_percentage)
             
             obj.setRandom();
-
-            z = obj.generateRandomMeasure();
+            
+            k = 1;
+            E_bayes  = [];
+            Sigma_bayes = [];
+            z = [];
+            
+            z = [z, obj.generateRandomMeasure()];
 
             p_priori = obj.generateLinearProbability();
-            p_posteriori = obj.normGaussian(z, obj.sigma_z0);
+            p_posteriori = obj.normGaussian(z(end), obj.sigma_z0);
             
             p_z = obj.calcIntegrateMeasure(p_priori, p_posteriori);
             p_bayes = BayesFilter.calcBayesProbability(p_priori, p_posteriori, p_z);
             
-            k = 1;
-            
             stop_sigma = confidence_percentage * obj.sigma_z0;
             
-            [E_bayes, sigma_bayes] = obj.getMoments(p_bayes);
+            [e_bayes, sigma_bayes] = obj.getMoments(p_bayes);
+            E_bayes = [E_bayes, e_bayes];
+            Sigma_bayes = [Sigma_bayes, sigma_bayes];
+            
+            E_priori = obj.calcIntegrateExpectancy(p_priori);
+            
+            obj.showCharts(p_priori, p_posteriori, p_bayes, ...
+                E_priori, z, E_bayes, Sigma_bayes, stop_sigma, k);
             
             while sigma_bayes > stop_sigma
                 k = k + 1;
                 p_priori = p_bayes;
                 
-                z = obj.generateRandomMeasure();
-                p_posteriori = obj.normGaussian(z, obj.sigma_z0);
+                z = [z, obj.generateRandomMeasure()];
+                p_posteriori = obj.normGaussian(z(end), obj.sigma_z0);
                 p_z = obj.calcIntegrateMeasure(p_priori, p_posteriori);
                 p_bayes = BayesFilter.calcBayesProbability(p_priori, p_posteriori, p_z);
                 
-                [E_bayes, sigma_bayes] = obj.getMoments(p_bayes);
+                [e_bayes, sigma_bayes] = obj.getMoments(p_bayes);
+                E_bayes = [E_bayes, e_bayes];
+                Sigma_bayes = [Sigma_bayes, sigma_bayes];
                 
-                obj.showCharts();
+                E_priori = obj.calcIntegrateExpectancy(p_priori);
+                
+                obj.showCharts(p_priori, p_posteriori, p_bayes, ...
+                E_priori, z, E_bayes, Sigma_bayes, stop_sigma, k);
             end
         end
         
@@ -109,33 +124,34 @@ classdef BayesFilter < handle
             
             subplot(3,2,plot_id); stem(obj.x0, peak, 'g', 'linewidth', 5); hold on;
             plot(x, p, color, 'linewidth', 2);
-            stem(E, peak, color, 'linewidth', 2);
+            stem(E(end), peak, color, 'linewidth', 2);
             hold off; xlabel('x'); ylabel('p(x)'); grid on;
-            axis([obj.x_ll obj.x_rl 0 peak]); title(chart_name)
+            axis([obj.x_ll obj.x_rl 0 peak]); title(chart_name);
         end
         
         function showParamChat(~, chart_name, plot_id, param, ...
-                color, inf_limit, sup_limit, param_name, param_reference, k)
+                inf_limit, sup_limit, param_name, param_reference, k)
             subplot(3,2,plot_id);
-            plot(1:k, param, color, 'linewidth', 2); hold on;
-            plot(1:k, param_reference * ones(1, k), color, 'linewidth', 2);
+            plot(1:k, param, 'r', 'linewidth', 2); hold on;
+            plot(1:k, param_reference * ones(1, k), 'k', 'linewidth', 2);
             hold off; grid on; axis([0 k inf_limit sup_limit]);
             xlabel('tempo [número de iterações]'); ylabel(param_name);
-            title(sprintf('%s: %.4f', chart_name, param(end)))
+            title(sprintf('%s: %.4f', chart_name, param(end)));
         end
         
-        function showCharts(obj)
+        function showCharts(obj, p_priori, p_posteriori, p_bayes, ...
+                E_priori, z, E_bayes, sigma_bayes, stop_sigma, k)
             
-            obj.showProbabilityFunction(p_priori, 'FDP à priori', 1, 'b', E_priori)
-            obj.showProbabilityFunction(p_posteriori, 'FDP à posteriori', 3, 'r', z)
-            obj.showProbabilityFunction(p_bayes, 'FDP Bayes', 5, 'k', E_bayes)
+            obj.showProbabilityFunction(p_priori, 'FDP à priori', 1, 'b', E_priori);
+            obj.showProbabilityFunction(p_posteriori, 'FDP à posteriori', 3, 'r', z);
+            obj.showProbabilityFunction(p_bayes, 'FDP Bayes', 5, 'k', E_bayes);
             
-            obj.showParamChat('Medida do Sensor', 2, z, 'k', min([z obj.x0]), ...
-                max([z obj.x0]), 'sendor', k, obj.x0);
-            obj.showParamChat('Medida do Bayes', 4, E_bayes, 'r', min([E_bayes obj.x0]), ...
-                max(sigma_bayes), 'esperança', k, obj.x0);
-            obj.showParamChat('Sigma de Bayes', 6, sigma_bayes, 'r', 0, ...
-                max([z obj.x0]), 'desvio padrão', k, stop_sigma);
+            obj.showParamChat('Medida do Sensor', 2, z, min([z obj.x0]), ...
+                max([z obj.x0]), 'sendor', obj.x0, k);
+            obj.showParamChat('Medida do Bayes', 4, E_bayes, min([E_bayes obj.x0]), ...
+                max([E_bayes obj.x0]), 'esperança', obj.x0, k);
+            obj.showParamChat('Sigma de Bayes', 6, sigma_bayes, 0, ...
+                max(sigma_bayes), 'desvio padrão', stop_sigma, k);
 
             drawnow;
         end
